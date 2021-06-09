@@ -1,6 +1,6 @@
-
 import numpy as np
 import ipdb
+import rdkit
 from torch._C import Value
 import torchvision
 import torchvision.transforms as transforms
@@ -15,6 +15,12 @@ import random
 import torch.utils.data as data
 import torchvision.transforms.functional as TF
 import cv2
+try :
+    from rdkit import Chem
+except :
+    os.system("pip install rdkit-pypi")
+    from rdkit import Chem
+    
 
 class tox_21(Dataset) :
     def __init__(self, file_root, mode="train", ratio=0.3, target="all") :
@@ -41,6 +47,19 @@ class tox_21(Dataset) :
         self.check_target(target)
             
         self.trn_file, self.val_file, self.tst_file = self.split_data()
+        
+        self.SMILES_CHARS = [' ',
+                  '#', '%', '(', ')', '+', '-', '.', '/',
+                  '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+                  '=', '@',
+                  'A', 'B', 'C', 'F', 'H', 'I', 'K', 'L', 'M', 'N', 'O', 'P',
+                  'R', 'S', 'T', 'V', 'X', 'Z',
+                  '[', '\\', ']',
+                  'a', 'b', 'c', 'e', 'g', 'i', 'l', 'n', 'o', 'p', 'r', 's',
+                  't', 'u']
+        
+        self.smi2index = dict( (c,i) for i,c in enumerate( self.SMILES_CHARS ) )
+        self.index2smi = dict( (i,c) for i,c in enumerate( self.SMILES_CHARS ) )
     
     def __len__(self) :
         
@@ -89,6 +108,20 @@ class tox_21(Dataset) :
         
         return trn_file, val_file, tst_file 
     
+    def smiles_encoder(self, smiles, maxlen=120 ):
+        smiles = Chem.MolToSmiles(Chem.MolFromSmiles( smiles ))
+        X = np.zeros( ( maxlen, len( self.SMILES_CHARS ) ) )
+        for i, c in enumerate( smiles ):
+            X[i, self.smi2index[c] ] = 1
+        return X
+ 
+    def smiles_decoder(self, X ):
+        smi = ''
+        X = X.argmax( axis=-1 )
+        for i in X:
+            smi += self.index2smi[ i ]
+        return smi
+    
     def get_x_y(self, idx) :
         
         if self.mode == "train" :
@@ -120,6 +153,8 @@ class tox_21(Dataset) :
         if target_label != "all" :
             index = int(targets.index(target_label)) 
             labels = labels[index]
+            
+        molecular = self.smiles_encoder(molecular)
         
         return molecular, labels 
 
