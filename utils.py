@@ -14,13 +14,12 @@ from collections import Iterable
 import matplotlib.pyplot as plt
 from slacker import Slacker
 import argparse
-from model import *
-from torch.utils.data.sampler import SubsetRandomSampler
-from losses import DiceLoss,tversky_loss, NLL_OHEM
+from models import *
 from optimizers import RAdam
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
 import torch.utils.data as data
+
 
 class AverageMeter(object):
 
@@ -148,16 +147,9 @@ def calc_stats(data_root):
     return {'mean': total_mean, 'std': total_std}
 
 def select_arch(arch_name, in_shape=(1,256,256), padding_size=1, momentum=0.1) :
-    if arch_name == "unet" :
-        net = Unet2D(in_shape=in_shape, padding=padding_size, momentum=momentum)
-    elif arch_name == 'mtlunet' :
-        net = MTL_Unet(in_shape=in_shape, padding=padding_size, momentum=momentum)
-    elif arch_name == 'naive' :
-        net = MTL_NAIVE_UNET(in_shape=in_shape, padding=padding_size, momentum=momentum)
-    elif arch_name == 'supervision_unet' :
-        net = Supervision_Unet(in_shape=in_shape, padding=padding_size, momentum=momentum)
-    else :
-        raise ValueError('{} is Not supported yet.'.format(arch_name))
+    
+    net = Unet2D(in_shape=in_shape, padding=padding_size, momentum=momentum)
+    
     return net
 
 def select_optimizer(optim_function, initial_lr, net, weight_decay=0.0001, momentum=0.9) :
@@ -173,7 +165,7 @@ def select_optimizer(optim_function, initial_lr, net, weight_decay=0.0001, momen
     return optimizer
 
 def check_correct_forgget(output, target, ephoch,
-size, correct, before_correct) :
+                            size, correct, before_correct) :
     if ephoch == 0 :
         correct = ((output-target) == 0).float() # 맞추면 1 틀리면 0
         forget = None
@@ -189,7 +181,6 @@ def send_slack_message(token,channel,messge):
     slack = Slacker(token)
     slack.chat.post_message(channel, messge)
 
-
 def str2bool(v):
     if isinstance(v, bool):
        return v
@@ -200,7 +191,32 @@ def str2bool(v):
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
-class Performance(object) :
+import sklearn.metrics as metric
+
+def Performance(true_label, prediction) :
+    '''
+    Performance Measure all of Classifications  
+    input type must be list or set 
+    (not recommanded pytorch output, but you can use that)
+    
+    you can use 
+    Performance(real label, model predicition)
+    
+    then you can get 
+    accuracy, confusion matrix, auc-roc score 
+    '''
+    
+    proba = prediction 
+    fpr, tpr, thresholds = metric.roc_curve(true_label, proba, pos_label=1)
+    
+    prediction = (proba > 0.5).float()
+    
+    accuracy = metric.accuracy_score(true_label, prediction)
+    tn, fp, fn, tp = metric.confusion_matrix(true_label, prediction).ravel()
+    
+    return [fpr, tpr, thresholds], accuracy, [tn, fp, fn, tp]
+        
+class confusion_matrix(object) :
     def __init__(self) :
         self.confusionmatrix = [0, 0, 0, 0]
         # TP, TN, FP, FN
@@ -227,11 +243,3 @@ if __name__ == "__main__" :
     val_logger = Logger(os.path.join(work_dir, 'validation.log'))
     tst_logger = Logger(os.path.join(work_dir, 'test.log'))
 
-    draw_self_supervision_curve(work_dir, trn_logger, val_logger, tst_logger)
-
-    ''' work_dir = "/daintlab/home/geongyu/MTL/MTL/Self_Supervision/Inpainting_half_training2"
-    trn_logger = Logger(os.path.join(work_dir, 'train.log'))
-    trn_raw_logger = Logger(os.path.join(work_dir, 'train_raw.log'))
-    val_logger = Logger(os.path.join(work_dir, 'validation.log'))
-    draw_self_supervision_curve(work_dir, trn_logger, val_logger)
-    '''

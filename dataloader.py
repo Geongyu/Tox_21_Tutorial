@@ -1,20 +1,9 @@
 import numpy as np
 import ipdb
-import rdkit
-from torch._C import Value
-import torchvision
-import torchvision.transforms as transforms
 import torch
 from torch.utils.data import Dataset
-import ast
 import os
-import glob
-from PIL import Image
 import pandas as pd
-import random
-import torch.utils.data as data
-import torchvision.transforms.functional as TF
-import cv2
 try :
     from rdkit import Chem
 except :
@@ -28,20 +17,17 @@ class tox_21(Dataset) :
         
         try :      
             self.data = pd.read_csv(self.file_root)
+            self.data = self.data.fillna(0)
         except :
             raise ValueError("File root is not supported loacation")
                     
         mode = mode.lower()
-        
-        if self.mode not in ["train", "validation", "test", "t", "v"] :
+        if mode not in ["train", "validation", "test", "t", "v"] :
             raise ValueError("Not supported mode")
         else :
             self.mode = mode 
         
-        if type(ratio) != int :
-            raise ValueError("The Ratio are must be INT type")
-        else : 
-            self.ratio = ratio 
+        self.ratio = ratio 
         
         self.target = target  
         self.check_target(target)
@@ -73,7 +59,7 @@ class tox_21(Dataset) :
             return len(self.file_root)
         
     def check_target(self, target) :
-        targets = ["NR-AR", "NR-AR-LBD", "NR-AhR", "NR-Aromatase", "NR-ER",
+        targets = ["NR-AR", "NR-AR-LBD", "NR-AhR", "NR-Aromatase", "NR-ER", 
                 "NR-ER-LBD", "NR-PPAR-gamma", "SR-ARE", "SR-ATAD5", "SR-HSE", 
                 "SR-MMP", "SR-p53", "all"]
         
@@ -106,7 +92,7 @@ class tox_21(Dataset) :
         val_file = tmp_file[tmp_idx:]
         val_file = val_file.reset_index(drop=True)
         
-        return trn_file, val_file, tst_file 
+        return tmp_file, val_file, tst_file 
     
     def smiles_encoder(self, smiles, maxlen=120 ):
         smiles = Chem.MolToSmiles(Chem.MolFromSmiles( smiles ))
@@ -159,5 +145,14 @@ class tox_21(Dataset) :
         return molecular, labels 
 
 if __name__=='__main__':
-
-    import ipdb; ipdb.set_trace()
+    
+    file_root = "/home/deepbio/Desktop/ADMET_code/Data/tox21.csv"
+    train_set = tox_21(file_root, mode="train", ratio=0.2, target="NR-AR") 
+    train_loader = torch.utils.data.DataLoader(train_set,
+                                               batch_size=2,
+                                               shuffle=False,
+                                               num_workers=0)
+    
+    for idx, (data, label) in enumerate(train_loader) :
+        
+        import ipdb; ipdb.set_trace()
