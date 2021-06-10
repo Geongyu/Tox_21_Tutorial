@@ -17,7 +17,7 @@ class tox_21(Dataset) :
         
         try :      
             self.data = pd.read_csv(self.file_root)
-            self.data = self.data.fillna(0)
+            #self.data = self.data.fillna(0)
         except :
             raise ValueError("File root is not supported loacation")
                     
@@ -39,10 +39,10 @@ class tox_21(Dataset) :
                   '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
                   '=', '@',
                   'A', 'B', 'C', 'F', 'H', 'I', 'K', 'L', 'M', 'N', 'O', 'P',
-                  'R', 'S', 'T', 'V', 'X', 'Z',
+                  'R', 'S', 'T', 'V', 'X', 'Z', 'G', 'Y', 'D', 
                   '[', '\\', ']',
                   'a', 'b', 'c', 'e', 'g', 'i', 'l', 'n', 'o', 'p', 'r', 's',
-                  't', 'u']
+                  't', 'u', 'd', 'y']
         
         self.smi2index = dict( (c,i) for i,c in enumerate( self.SMILES_CHARS ) )
         self.index2smi = dict( (i,c) for i,c in enumerate( self.SMILES_CHARS ) )
@@ -74,31 +74,66 @@ class tox_21(Dataset) :
     def split_data(self) :
         ratio = self.ratio 
         
-        tst_ratio = 1-ratio 
-        tst_idx = int(len(self.data) * tst_ratio)
-        tst_file = self.data[tst_idx:]
-        tst_file = tst_file.reset_index(drop=True)
+        if self.target == "all" :
+            tst_ratio = 1-ratio 
+            tst_idx = int(len(self.data) * tst_ratio)
+            tst_file = self.data[tst_idx:]
+            tst_file = tst_file.reset_index(drop=True)
+            
+            tmp_file = self.data[:tst_idx]
+            tmp_file = tmp_file.reset_index(drop=True)
+            
+            tmp = len(tmp_file)
+            tmp_ratio = 0.8
+            tmp_idx = int(tmp * tmp_ratio) 
+            
+            trn_file = tmp_file[:tmp_idx]
+            trn_file = trn_file.reset_index(drop=True)
+            
+            val_file = tmp_file[tmp_idx:]
+            val_file = val_file.reset_index(drop=True)
+            
+            return tmp_file, val_file, tst_file 
         
-        tmp_file = self.data[:tst_idx]
-        tmp_file = tmp_file.reset_index(drop=True)
-        
-        tmp = len(tmp_file)
-        tmp_ratio = 0.8
-        tmp_idx = int(tmp * tmp_ratio) 
-        
-        trn_file = tmp_file[:tmp_idx]
-        trn_file = trn_file.reset_index(drop=True)
-        
-        val_file = tmp_file[tmp_idx:]
-        val_file = val_file.reset_index(drop=True)
-        
-        return tmp_file, val_file, tst_file 
+        else :
+            
+            data = self.data
+            data = data[["{}".format(self.target), "smiles"]]
+            data = data.dropna(axis=0)
+            data = data.reset_index(drop=True)
+            
+            tst_ratio = 1-ratio 
+            tst_idx = int(len(data) * tst_ratio)
+            tst_file = data[tst_idx:]
+            tst_file = tst_file.reset_index(drop=True)
+            
+            tmp_file = data[:tst_idx]
+            tmp_file = tmp_file.reset_index(drop=True)
+            
+            tmp = len(tmp_file)
+            tmp_ratio = 0.8
+            tmp_idx = int(tmp * tmp_ratio) 
+            
+            trn_file = tmp_file[:tmp_idx]
+            trn_file = trn_file.reset_index(drop=True)
+            
+            val_file = tmp_file[tmp_idx:]
+            val_file = val_file.reset_index(drop=True)
+            
+            return tmp_file, val_file, tst_file 
     
-    def smiles_encoder(self, smiles, maxlen=120 ):
+    def smiles_encoder(self, smiles, maxlen=200):
         smiles = Chem.MolToSmiles(Chem.MolFromSmiles( smiles ))
         X = np.zeros( ( maxlen, len( self.SMILES_CHARS ) ) )
+        
+        if len(smiles) > 140 :
+            smiles = smiles[:140]
         for i, c in enumerate( smiles ):
-            X[i, self.smi2index[c] ] = 1
+            try :
+                X[i, self.smi2index[c] ] = 1
+            except :
+                print(smiles)
+                import ipdb; ipdb.set_trace()
         return X
  
     def smiles_decoder(self, X ):
@@ -155,4 +190,5 @@ if __name__=='__main__':
     
     for idx, (data, label) in enumerate(train_loader) :
         
-        import ipdb; ipdb.set_trace()
+        print(idx)
+    import ipdb; ipdb.set_trace()

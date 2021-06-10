@@ -72,7 +72,7 @@ if __name__ == '__main__':
                                                shuffle=False,
                                                num_workers=0)
     
-    net = BESTox(input_shape = (120, 56), padding=1, momentum=0.1).cpu().double()
+    net = BESTox(input_shape = (200, 56), padding=1, momentum=0.1).cpu().double()
     
     for idx, (data, label) in enumerate(train_loader) :
         out = net(data.double())

@@ -146,9 +146,9 @@ def calc_stats(data_root):
 
     return {'mean': total_mean, 'std': total_std}
 
-def select_arch(arch_name, in_shape=(1,256,256), padding_size=1, momentum=0.1) :
+def select_arch(arch_name, in_shape=(200, 56), padding_size=1, momentum=0.1) :
     
-    net = Unet2D(in_shape=in_shape, padding=padding_size, momentum=momentum)
+    net = BESTox(input_shape=in_shape, padding=padding_size, momentum=momentum)
     
     return net
 
@@ -207,14 +207,18 @@ def Performance(true_label, prediction) :
     '''
     
     proba = prediction 
-    fpr, tpr, thresholds = metric.roc_curve(true_label, proba, pos_label=1)
+    pred = (proba > 0.5)
+    roc_auc_score = 1 #metric.roc_auc_score(true_label, pred)
     
-    prediction = (proba > 0.5).float()
+    prediction = (proba > 0.5)
     
     accuracy = metric.accuracy_score(true_label, prediction)
-    tn, fp, fn, tp = metric.confusion_matrix(true_label, prediction).ravel()
+    if len(metric.confusion_matrix(true_label, prediction).ravel()) == 4 :
+        tn, fp, fn, tp = metric.confusion_matrix(true_label, prediction).ravel()
+    else :
+        tn, fp, fn, tp = metric.confusion_matrix(true_label, prediction)[0][0], 0, 0, 0
     
-    return [fpr, tpr, thresholds], accuracy, [tn, fp, fn, tp]
+    return roc_auc_score, accuracy, [tn, fp, fn, tp]
         
 class confusion_matrix(object) :
     def __init__(self) :
