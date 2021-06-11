@@ -8,6 +8,8 @@ import numpy as np
 import torch.optim as optim
 import torch.utils.data as data
 import torch.backends.cudnn as cudnn
+import math 
+import pandas as pd
 from torch import nn as nn
 from dataloader import tox_21
 from utils import Logger, AverageMeter, save_checkpoint, select_arch, select_optimizer, Performance
@@ -15,7 +17,7 @@ from utils import Logger, AverageMeter, save_checkpoint, select_arch, select_opt
 parser = argparse.ArgumentParser()
 parser.add_argument('--data-root', default="/home/deepbio/Desktop/ADMET_code/Data/tox21.csv")
 parser.add_argument('--work-dir', default="/home/deepbio/Desktop/ADMET_code")
-parser.add_argument('--exp',default="[NR-AR]_ADAM_LR00001_Except_NaN", type=str)
+parser.add_argument('--exp',default="[NR-Aromatase]_ADAM_LR00001_Except_NaN", type=str)
 
 parser.add_argument('--batch-size', default=64, type=int)
 parser.add_argument('--initial-lr', default=0.0001, type=float)
@@ -38,9 +40,9 @@ def main():
         pickle.dump(args, f)
 
     train_filename = args.data_root
-    trainset = tox_21(train_filename, mode="train", ratio=0.3, target="NR-AR")
+    trainset = tox_21(train_filename, mode="train", ratio=0.3, target="NR-Aromatase")
     
-    test_set = tox_21(train_filename, mode="test", ratio=0.3, target="NR-AR")
+    test_set = tox_21(train_filename, mode="test", ratio=0.3, target="NR-Aromatase")
 
     train_set, valid_set = torch.utils.data.random_split(trainset, [int(len(trainset)*0.8),
                                                      len(trainset)-int(len(trainset)*0.8)])
@@ -54,14 +56,14 @@ def main():
                                     num_workers=args.num_workers, shuffle=True)
     
     test_loader = data.DataLoader(test_set, batch_size=int(args.batch_size),
-                                    num_workers=args.num_workers, shuffle=True)
+                                    num_workers=args.num_workers, shuffle=False)
 
     trn_logger = Logger(os.path.join(work_dir, 'train.log'))
     trn_raw_logger = Logger(os.path.join(work_dir, 'train_raw.log'))
     val_logger = Logger(os.path.join(work_dir, 'validation.log'))
     tst_logger = Logger(os.path.join(work_dir, 'test.log'))
 
-    net = select_arch(args.arch, in_shape=(200, 56))
+    net = select_arch(args.arch, in_shape=(200, 61))
 
     # loss
     # If you wanna make "UNKNOWN" class 
@@ -82,25 +84,30 @@ def main():
                                                   milestones=lr_schedule[:-1],
                                                   gamma=0.1)
     
-
+    best_f1 = 0 
     for epoch in range(lr_schedule[-1]):
         main_train(train_loader, net, criterion_bce, optimizer,
             epoch, trn_logger, trn_raw_logger, os.path.join(args.work_dir, args.exp))
 
-        validate(valid_loader, net, criterion_bce, epoch, val_logger)
+        val_f1 = validate(valid_loader, net, criterion_bce, epoch, val_logger)
+        
+        if math.isnan(val_f1) == True :
+            val_f1 = 0 
 
         lr_scheduler.step()
 
         #import ipdb; ipdb.set_trace()
+        is_best = val_f1 > best_f1
+        best_f1 = max(val_f1, best_f1)
         checkpoint_filename = 'model_checkpoint_{:0>3}.pth'.format(epoch + 1)
         save_checkpoint({'epoch': epoch + 1,
                             'state_dict': net.state_dict(),
                             'optimizer': optimizer.state_dict()},
-                        1, work_dir,
+                        is_best, work_dir,
                         checkpoint_filename)
 
     # test부분 여기에
-    loss, f1_score, sensitivity, precision, specificity, accuracy, auc_score = test(test_loader, net, criterion_bce, epoch, tst_logger)
+    loss, f1_score, sensitivity, precision, specificity, accuracy, auc_score = test(test_loader, net, criterion_bce, epoch, tst_logger, os.path.join(args.work_dir, args.exp))
     print("End Phase Test Result \t")
     print("-" * 50)
     print("Final Test Loss are {} \t".format(loss)) 
@@ -127,9 +134,11 @@ def main_train(trn_loader, model, criterion_bce,
     confusion_matrixs = [] 
     
     for i, (input, target) in enumerate(trn_loader):
+        #import ipdb; ipdb.set_trace()
         data_time.update(time.time() - end)
         input, target = input.float().cuda(), target.float().cuda()
-        output = model(input)
+        import ipdb; ipdb.set_trace()
+        output, hook = model(input, hook="yes")
 
         #import ipdb; ipdb.set_trace()
         target = target.unsqueeze(1)
@@ -242,8 +251,10 @@ def validate(val_loader, model, criterion_dice, epoch, logger):
     logger.write([epoch, bce_losses.avg, f1_score, sensitivity, 
                   precision, specificity, accuracy, auc_score])
     
+    return f1_score
+    
 
-def test(tst_loader, model, criterion_dice, epoch, logger):
+def test(tst_loader, model, criterion_dice, epoch, logger, work_dir):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     bce_losses = AverageMeter()
@@ -252,17 +263,25 @@ def test(tst_loader, model, criterion_dice, epoch, logger):
     confusion_matrixs = [] 
     model.eval()
     
+    label, prob = [], [] 
     with torch.no_grad():
         end = time.time()
-        for i, (input, target) in enumerate(tst_loader):
+        for idx, (input, target) in enumerate(tst_loader):
 
-            input, target = input.cuda(), target.cuda()
+            input, target = input.float().cuda(), target.float().cuda()
             target = target.unsqueeze(1)
             output = model(input)
 
             loss_bce = criterion_dice(output, target)
             pos_probs = torch.sigmoid(output)
 
+            a = target.detach().cpu().numpy() 
+            b = pos_probs.detach().cpu().numpy()
+            
+            for i, j in zip(a, b) : 
+                label.append(i[0])
+                prediction = (j > 0.5)
+                prob.append(prediction[0]*1.0) 
 
             auc, acc, confusion = Performance(target.detach().cpu().numpy(), 
                                           pos_probs.detach().cpu().numpy())
@@ -282,7 +301,7 @@ def test(tst_loader, model, criterion_dice, epoch, logger):
             'Classification Loss {cls_loss:.4f}({cls_losses.avg:.4f})\t'
             'Accuracy {acc:.3f} ({acces.avg:.3f})\t'
             'AUC score {auc:.3f} ({auces.avg:.3f})'.format(
-            epoch, i, len(tst_loader), batch_time=batch_time,
+            epoch, idx, len(tst_loader), batch_time=batch_time,
             data_time=data_time, cls_loss=loss_bce.item(),
             cls_losses = bce_losses, acc=acc, acces=accuracies, 
             auc=auc, auces=auces))
@@ -301,6 +320,13 @@ def test(tst_loader, model, criterion_dice, epoch, logger):
     
     logger.write([epoch, bce_losses.avg, f1_score, sensitivity, 
                   precision, specificity, accuracy, auc_score])
+    
+    df = pd.DataFrame()
+    #import ipdb; ipdb.set_trace()
+    df['target'] = label  
+    df['prediction'] = prob 
+    
+    df.to_csv("{}/prediction.csv".format(work_dir), index=False)
     
     return bce_losses.avg, f1_score, sensitivity, precision, specificity, accuracy, auc_score
 

@@ -35,7 +35,7 @@ class BESTox(nn.Module) :
         
         self.relu = nn.ReLU()
         
-    def forward(self, x) :
+    def forward(self, x, hook="no") :
         
         #import ipdb; ipdb.set_trace()
         x = self.conv1(x)
@@ -48,6 +48,9 @@ class BESTox(nn.Module) :
         
         x = self.max_pool(x)
         
+        if hook == "yes" :
+            hooking = x 
+        
         x = x.view(x.size(0), -1)
         
         x = self.relu(self.fc1(x))
@@ -57,23 +60,26 @@ class BESTox(nn.Module) :
         
         output = self.output(x)
         
-        return output 
+        if hook == "yes" :
+            return output, hooking 
+        else :
+            return output 
 
 if __name__ == '__main__':
-    #from torchsummary import summary
-    #net = BESTox(input_shape = (140, 56), padding=1, momentum=0.1).cpu()
-    #summary(net.cpu(), (140, 56), device="cpu")
+    from torchsummary import summary
+    net = BESTox(input_shape = (200, 61), padding=1, momentum=0.1).cpu()
+    summary(net.cpu(), (200, 61), device="cpu")
     
-    from dataloader import tox_21
-    file_root = "/home/deepbio/Desktop/ADMET_code/Data/tox21.csv"
-    train_set = tox_21(file_root, mode="train", ratio=0.2, target="NR-AR") 
-    train_loader = torch.utils.data.DataLoader(train_set,
-                                               batch_size=1,
-                                               shuffle=False,
-                                               num_workers=0)
+    # from dataloader import tox_21
+    # file_root = "/home/deepbio/Desktop/ADMET_code/Data/tox21.csv"
+    # train_set = tox_21(file_root, mode="train", ratio=0.2, target="NR-AR") 
+    # train_loader = torch.utils.data.DataLoader(train_set,
+    #                                            batch_size=1,
+    #                                            shuffle=False,
+    #                                            num_workers=0)
     
-    net = BESTox(input_shape = (200, 56), padding=1, momentum=0.1).cpu().double()
+    # net = BESTox(input_shape = (200, 56), padding=1, momentum=0.1).cpu().double()
     
-    for idx, (data, label) in enumerate(train_loader) :
-        out = net(data.double())
-        import ipdb; ipdb.set_trace()
+    # for idx, (data, label) in enumerate(train_loader) :
+    #     out = net(data.double())
+    #     import ipdb; ipdb.set_trace()

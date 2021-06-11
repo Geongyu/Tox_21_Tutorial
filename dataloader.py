@@ -162,33 +162,35 @@ class tox_21(Dataset) :
     def __getitem__(self, idx):
         
         molecular, labels = self.get_x_y(idx)
-        
-        target_label = self.target.lower()
-        
-        targets = ["NR-AR", "NR-AR-LBD", "NR-AhR", "NR-Aromatase", "NR-ER",
-                "NR-ER-LBD", "NR-PPAR-gamma", "SR-ARE", "SR-ATAD5", "SR-HSE", 
-                "SR-MMP", "SR-p53"]
-        
-        targets = [i.lower() for i in targets] 
-        
-        if target_label != "all" :
-            index = int(targets.index(target_label)) 
-            labels = labels[index]
+        #import ipdb; ipdb.set_trace()
             
         molecular = self.smiles_encoder(molecular)
+        labels = labels[0]
         
         return molecular, labels 
 
 if __name__=='__main__':
     
     file_root = "/home/deepbio/Desktop/ADMET_code/Data/tox21.csv"
-    train_set = tox_21(file_root, mode="train", ratio=0.2, target="NR-AR") 
-    train_loader = torch.utils.data.DataLoader(train_set,
-                                               batch_size=2,
-                                               shuffle=False,
-                                               num_workers=0)
+    targets = ["NR-AR", "NR-AR-LBD", "NR-AhR", "NR-Aromatase", "NR-ER", 
+                "NR-ER-LBD", "NR-PPAR-gamma", "SR-ARE", "SR-ATAD5", "SR-HSE", 
+                "SR-MMP", "SR-p53"]
     
-    for idx, (data, label) in enumerate(train_loader) :
+    totals = []
+    
+    for i in targets :
+        for j in ["train", "test"] : 
+            train_set = tox_21(file_root, mode="{}".format(j), ratio=0.2, target="{}".format(i)) 
+            train_loader = torch.utils.data.DataLoader(train_set,
+                                                    batch_size=1,
+                                                    shuffle=False,
+                                                    num_workers=0)
+            
+            labels = [] 
+            for idx, (data, label) in enumerate(train_loader) :
+                labels.append(label[0])
+            
+            print("{} Task {} data are {}[Positive {}]".format(i, j, len(labels), np.sum(labels)))
+            totals.append([i, j, len(labels), np.sum(labels)])
         
-        print(idx)
     import ipdb; ipdb.set_trace()
